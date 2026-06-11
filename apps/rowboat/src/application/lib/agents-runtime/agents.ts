@@ -154,6 +154,19 @@ ${CHILD_TRANSFER_RELATED_INSTRUCTIONS}
         .map(e => tools[e.name])
         .filter(Boolean)
 
+    // Also attach tools declared on the agent config (workflow.agents[].tools).
+    // API-seeded workflows (e.g. mongo-seeded projects) list tool names there
+    // instead of embedding [@tool:name](#mention) references in instructions;
+    // without this, those agents silently ran with no tools at all.
+    for (const toolName of config.tools ?? []) {
+        if (toolName === 'rag_search') continue;
+        const t = tools[toolName];
+        if (t && !agentTools.includes(t)) {
+            agentTools.push(t);
+            agentLogger.log(`attached config-declared tool: ${toolName}`);
+        }
+    }
+
     // Add RAG tool if needed
     if (config.ragDataSources?.length) {
         const ragTool = createRagTool(logger, usageTracker, config, projectId);

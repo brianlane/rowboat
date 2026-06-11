@@ -15,6 +15,10 @@ export const WorkflowAgent = z.object({
     examples: z.string().optional(),
     model: z.string(),
     locked: z.boolean().default(false).describe('Whether this agent is locked and cannot be deleted').optional(),
+    // Tool names this agent may call, attached directly (in addition to any
+    // [@tool:name](#mention) references inside instructions). API-seeded
+    // workflows declare tools here without inline mentions.
+    tools: z.array(z.string()).optional(),
     toggleAble: z.boolean().default(true).describe('Whether this agent can be enabled or disabled').optional(),
     global: z.boolean().default(false).describe('Whether this agent is a global agent, in which case it cannot be connected to other agents').optional(),
     ragDataSources: z.array(z.string()).optional(),
