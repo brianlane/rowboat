@@ -26,6 +26,8 @@ export const Turn = z.object({
     input: z.object({
         messages: z.array(Message),
         mockTools: z.record(z.string(), z.string()).nullable().optional(),
+        // Per-turn start-agent override (see ApiRequest.startAgent).
+        startAgent: z.string().nullable().optional(),
     }),
     output: z.array(Message),
     error: z.string().optional(),

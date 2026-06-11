@@ -126,6 +126,24 @@ export class RunConversationTurnUseCase implements IRunConversationTurnUseCase {
             conversation.workflow.mockTools = data.input.mockTools;
         }
 
+        // honor a per-turn start-agent override (ApiRequest.startAgent).
+        // Only applies when the named agent exists in the bound workflow;
+        // unknown names fall back to the workflow default rather than
+        // erroring mid-conversation. Note the agent call stack derived from
+        // prior assistant messages still wins on resumed conversations —
+        // this override matters for stateless turns, where the stack is
+        // empty and the runtime enters workflow.startAgent.
+        const requestedStartAgent = data.input.startAgent;
+        if (
+            requestedStartAgent &&
+            conversation.workflow.agents.some((a) => a.name === requestedStartAgent)
+        ) {
+            conversation.workflow = {
+                ...conversation.workflow,
+                startAgent: requestedStartAgent,
+            };
+        }
+
         // init usage tracker
         const usageTracker = new UsageTracker();
 
