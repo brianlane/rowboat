@@ -29,6 +29,13 @@ const USE_NATIVE_HANDOFFS = process.env.USE_NATIVE_HANDOFFS === 'true';
 
 // Agent execution limits
 const MAX_AGENT_TURNS = 25; // Configurable limit for agent SDK turns (default was 10)
+// Some models (observed: Gemini 2.5 Flash via the OpenAI-compat endpoint,
+// 2026-07-19) can get stuck deterministically returning EMPTY completions —
+// finish_reason "stop", zero output tokens, no message, no tool call. Each
+// empty response burns one SDK turn, so without a guard the run spins through
+// all MAX_AGENT_TURNS (~17s) and dies with an opaque "Max turns exceeded".
+// Abort after this many CONSECUTIVE empty completions instead.
+const MAX_CONSECUTIVE_EMPTY_RESPONSES = 3;
 
 // Internal types for agent handoffs and pipeline management
 // Context passing schemas for SDK handoffs (OpenAI API compatible)
@@ -1350,6 +1357,11 @@ export async function* streamResponse(
     let iter = 0;
     const MAXTURNITERATIONS = 25;
 
+    // Consecutive empty model completions (see MAX_CONSECUTIVE_EMPTY_RESPONSES).
+    // Spans loop iterations deliberately: the counter only resets when the
+    // model produces actual output.
+    let consecutiveEmptyResponses = 0;
+
     // loop indefinitely
     turnLoop: while (true) {
 
@@ -1412,6 +1424,22 @@ export async function* streamResponse(
         for await (const event of result) {
             const eventLogger = loopLogger.child(event.type);
             eventLogger.log(`*** GOT EVENT ***`, JSON.stringify(event));
+
+            // Empty-completion guard: a response_done with no output items is
+            // a completion the model finished without saying or doing anything.
+            // A stuck model repeats these deterministically; fail fast with a
+            // typed error instead of burning every SDK turn.
+            if (event.type === 'raw_model_stream_event' && event.data.type === 'response_done') {
+                if (event.data.response.output.length === 0) {
+                    consecutiveEmptyResponses++;
+                    if (consecutiveEmptyResponses >= MAX_CONSECUTIVE_EMPTY_RESPONSES) {
+                        loopLogger.log(`⚠️ model returned ${consecutiveEmptyResponses} consecutive empty completions - aborting turn`);
+                        throw new Error(`model_empty_response: agent ${agentName} model returned ${consecutiveEmptyResponses} consecutive empty completions (no content, no tool calls)`);
+                    }
+                } else {
+                    consecutiveEmptyResponses = 0;
+                }
+            }
 
             switch (event.type) {
                 case 'raw_model_stream_event':

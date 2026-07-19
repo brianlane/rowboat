@@ -29,18 +29,32 @@ export async function POST(
     const runTurnController = container.resolve<IRunTurnController>("runTurnController");
 
     // get assistant response
-    const response = await runTurnController.execute({
-        caller: "api",
-        apiKey: req.headers.get("Authorization")?.split(" ")[1],
-        projectId,
-        input: {
-            messages,
-            mockTools,
-            startAgent,
-        },
-        conversationId: conversationId || undefined,
-        stream: Boolean(stream),
-    });
+    //
+    // Wrapped so a failed turn returns a JSON error body instead of the
+    // framework's bare 500: downstream consumers (the VPS chat-worker's
+    // `rowboat_http_<status>:<body>` error taxonomy) log the body as the
+    // failure detail, and an empty body made incidents like the stuck
+    // empty-completion loop ("Max turns (25) exceeded", 2026-07-19) opaque
+    // in the platform's System Errors feed.
+    let response;
+    try {
+        response = await runTurnController.execute({
+            caller: "api",
+            apiKey: req.headers.get("Authorization")?.split(" ")[1],
+            projectId,
+            input: {
+                messages,
+                mockTools,
+                startAgent,
+            },
+            conversationId: conversationId || undefined,
+            stream: Boolean(stream),
+        });
+    } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        logger.log(`Turn failed: ${message}`);
+        return Response.json({ error: message }, { status: 500 });
+    }
 
     // if streaming is requested, return SSE stream
     if (stream && 'stream' in response) {
