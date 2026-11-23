@@ -65,4 +65,10 @@ describe("ApiRequest", () => {
         const parsed = ApiRequest.parse({ messages: [] });
         assert.equal(parsed.jobId, undefined);
     });
+
+    it("rejects an empty jobId instead of silently dropping it", () => {
+        assert.throws(() =>
+            ApiRequest.parse({ messages: [], jobId: "" }),
+        );
+    });
 });

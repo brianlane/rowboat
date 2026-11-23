@@ -16,7 +16,9 @@ export const ApiRequest = z.object({
     // webhook tool calls (POST body and JWT claims) so a downstream receiver
     // can scope a lookup to this one turn instead of the whole project.
     // It is opaque to rowboat and unrelated to rowboat's scheduled-job ids.
-    jobId: z.string().optional(),
+    // An empty string is rejected here so it can never silently run without
+    // the requested job scope downstream.
+    jobId: z.string().min(1).optional(),
 });export const ApiResponse = z.object({
     turn: Turn,
     conversationId: z.string().optional(),
