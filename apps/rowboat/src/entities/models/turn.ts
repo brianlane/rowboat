@@ -30,7 +30,9 @@ export const Turn = z.object({
         startAgent: z.string().nullable().optional(),
         // Optional caller-supplied id for this turn, forwarded on webhook
         // tool calls. Opaque to rowboat; unrelated to scheduled-job ids.
-        jobId: z.string().optional(),
+        // An empty string is rejected here, matching ApiRequest, so it can
+        // never silently run without the requested job scope downstream.
+        jobId: z.string().min(1).optional(),
     }),
     output: z.array(Message),
     error: z.string().optional(),

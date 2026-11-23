@@ -4,6 +4,7 @@ import crypto from "node:crypto";
 import { decodeJwt } from "jose";
 import { buildWebhookRequest } from "./webhook-request";
 import { ApiRequest } from "../../../../app/lib/types/api_types";
+import { Turn } from "../../../../src/entities/models/turn";
 
 const baseArgs = {
     requestId: "req-123",
@@ -69,6 +70,27 @@ describe("ApiRequest", () => {
     it("rejects an empty jobId instead of silently dropping it", () => {
         assert.throws(() =>
             ApiRequest.parse({ messages: [], jobId: "" }),
+        );
+    });
+});
+
+describe("Turn input", () => {
+    it("accepts an optional jobId", () => {
+        const parsed = Turn.shape.input.parse({
+            messages: [],
+            jobId: "job-abc",
+        });
+        assert.equal(parsed.jobId, "job-abc");
+    });
+
+    it("parses without jobId", () => {
+        const parsed = Turn.shape.input.parse({ messages: [] });
+        assert.equal(parsed.jobId, undefined);
+    });
+
+    it("rejects an empty jobId, matching ApiRequest", () => {
+        assert.throws(() =>
+            Turn.shape.input.parse({ messages: [], jobId: "" }),
         );
     });
 });
