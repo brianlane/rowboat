@@ -28,6 +28,9 @@ export const Turn = z.object({
         mockTools: z.record(z.string(), z.string()).nullable().optional(),
         // Per-turn start-agent override (see ApiRequest.startAgent).
         startAgent: z.string().nullable().optional(),
+        // Optional caller-supplied id for this turn, forwarded on webhook
+        // tool calls. Opaque to rowboat; unrelated to scheduled-job ids.
+        jobId: z.string().optional(),
     }),
     output: z.array(Message),
     error: z.string().optional(),

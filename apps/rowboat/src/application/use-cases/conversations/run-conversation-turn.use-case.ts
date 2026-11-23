@@ -150,7 +150,7 @@ export class RunConversationTurnUseCase implements IRunConversationTurnUseCase {
         // call agents runtime and handle generated messages
         try {
             const outputMessages: z.infer<typeof Message>[] = [];
-            for await (const event of streamResponse(projectId, conversation.workflow, inputMessages, usageTracker)) {
+            for await (const event of streamResponse(projectId, conversation.workflow, inputMessages, usageTracker, data.input.jobId)) {
                 // handle msg events
                 if ("role" in event) {
                     // collect generated message

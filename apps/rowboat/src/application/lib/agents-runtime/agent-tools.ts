@@ -4,7 +4,7 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { embed, generateText } from "ai";
 import { z } from "zod";
 import { composio } from "@/src/application/lib/composio/composio";
-import { SignJWT } from "jose";
+import { buildWebhookRequest } from "./webhook-request";
 import crypto from "crypto";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { tempBinaryCache } from "@/src/application/services/temp-binary-cache";
@@ -274,6 +274,7 @@ export async function invokeWebhookTool(
     projectId: string,
     name: string,
     input: any,
+    jobId?: string,
 ): Promise<unknown> {
     logger = logger.child(`invokeWebhookTool`);
     logger.log(`projectId: ${projectId}`);
@@ -307,34 +308,19 @@ export async function invokeWebhookTool(
         toolCall,
     });
     const requestId = crypto.randomUUID();
-    const bodyHash = crypto
-        .createHash('sha256')
-        .update(content, 'utf8')
-        .digest('hex');
 
-    // sign request
-    const jwt = await new SignJWT({
+    // build signed request (jobId flows into the body and JWT claims when set)
+    const { request, jwt } = await buildWebhookRequest({
         requestId,
+        toolCallId: toolCall.id,
+        content,
         projectId,
-        bodyHash,
-    })
-        .setProtectedHeader({
-            alg: 'HS256',
-            typ: 'JWT',
-        })
-        .setIssuer('rowboat')
-        .setAudience(project.webhookUrl)
-        .setSubject(`tool-call-${toolCall.id}`)
-        .setJti(requestId)
-        .setIssuedAt()
-        .setExpirationTime("5 minutes")
-        .sign(new TextEncoder().encode(project.secret));
+        webhookUrl: project.webhookUrl,
+        secret: project.secret,
+        jobId,
+    });
 
     // make request
-    const request = {
-        requestId,
-        content,
-    };
     const response = await fetch(project.webhookUrl, {
         method: 'POST',
         headers: {
@@ -513,6 +499,7 @@ export function createWebhookTool(
     usageTracker: UsageTracker,
     config: z.infer<typeof WorkflowTool>,
     projectId: string,
+    jobId?: string,
 ): Tool {
     const { name, description, parameters } = config;
 
@@ -528,7 +515,7 @@ export function createWebhookTool(
         },
         async execute(input: any) {
             try {
-                const result = await invokeWebhookTool(logger, usageTracker, projectId, name, input);
+                const result = await invokeWebhookTool(logger, usageTracker, projectId, name, input, jobId);
                 return JSON.stringify({
                     result,
                 });
@@ -724,6 +711,7 @@ export function createTools(
     projectId: string,
     workflow: { tools: z.infer<typeof WorkflowTool>[] },
     toolConfig: Record<string, z.infer<typeof WorkflowTool>>,
+    jobId?: string,
 ): Record<string, Tool> {
     const tools: Record<string, Tool> = {};
     const toolLogger = logger.child('createTools');
@@ -746,7 +734,7 @@ export function createTools(
             tools[toolName] = createGenerateImageTool(logger, usageTracker, config, projectId);
             toolLogger.log(`✓ created gemini image tool: ${toolName}`);
         } else if (config.isWebhook) {
-            tools[toolName] = createWebhookTool(logger, usageTracker, config, projectId);
+            tools[toolName] = createWebhookTool(logger, usageTracker, config, projectId, jobId);
             toolLogger.log(`✓ created webhook tool: ${toolName} (fallback)`);
         } else { // this is for placeholder tools
             tools[toolName] = createMockTool(logger, usageTracker, config);

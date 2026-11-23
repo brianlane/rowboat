@@ -1275,6 +1275,7 @@ export async function* streamResponse(
     workflow: z.infer<typeof Workflow>,
     messages: z.infer<typeof Message>[],
     usageTracker: UsageTracker,
+    jobId?: string,
 ): AsyncIterable<z.infer<typeof ZOutMessage>> {
     // Divider log for tracking agent loop start
     console.log('-------------------- AGENT LOOP START --------------------');
@@ -1307,7 +1308,7 @@ export async function* streamResponse(
     logger.log(`initialized stack: ${JSON.stringify(stack)}`);
 
     // create tools
-    const tools = createTools(logger, usageTracker, projectId, workflow, toolConfig);
+    const tools = createTools(logger, usageTracker, projectId, workflow, toolConfig, jobId);
 
     // create agents with feature flag support
     const createAgentsFunction = USE_NATIVE_HANDOFFS ? createAgentsWithNativeHandoffs : createAgentsLegacy;

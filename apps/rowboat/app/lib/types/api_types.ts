@@ -12,6 +12,11 @@ export const ApiRequest = z.object({
     // agent) use this to enter the right agent on stateless turns instead
     // of always landing on workflow.startAgent.
     startAgent: z.string().nullable().optional(),
+    // Optional caller-supplied id for this turn. When set, it is forwarded on
+    // webhook tool calls (POST body and JWT claims) so a downstream receiver
+    // can scope a lookup to this one turn instead of the whole project.
+    // It is opaque to rowboat and unrelated to rowboat's scheduled-job ids.
+    jobId: z.string().optional(),
 });export const ApiResponse = z.object({
     turn: Turn,
     conversationId: z.string().optional(),

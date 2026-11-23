@@ -24,7 +24,7 @@ export async function POST(
         logger.log(`Invalid JSON in request body: ${e}`);
         return Response.json({ error: "Invalid request" }, { status: 400 });
     }
-    const { conversationId, messages, mockTools, stream, startAgent } = data;
+    const { conversationId, messages, mockTools, stream, startAgent, jobId } = data;
 
     const runTurnController = container.resolve<IRunTurnController>("runTurnController");
 
@@ -46,6 +46,7 @@ export async function POST(
                 messages,
                 mockTools,
                 startAgent,
+                jobId,
             },
             conversationId: conversationId || undefined,
             stream: Boolean(stream),
