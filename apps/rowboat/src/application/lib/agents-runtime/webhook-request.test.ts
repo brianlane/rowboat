@@ -21,19 +21,32 @@ const baseArgs = {
     secret: "test-secret",
 };
 
+// A valid jobId is a UUID, matching newCoworker's contract
+// (src/lib/rowboat/webhook-jwt.ts: dashboard chat job ids are UUIDs;
+// anything else in the claim fails the whole token).
+const VALID_JOB_ID = "123e4567-e89b-12d3-a456-426614174000";
+
+// Values that must be rejected as jobId because they are not UUIDs.
+const INVALID_JOB_IDS = [
+    ["whitespace only", "   "],
+    ["newline", "123e4567-e89b-12d3-a456-426614174000\n"],
+    ["65 characters", "a".repeat(65)],
+    ["non-UUID", "job-abc"],
+] as const;
+
 describe("buildWebhookRequest", () => {
     it("includes jobId in the POST body and JWT claims when set", async () => {
         const { request, jwt } = await buildWebhookRequest({
             ...baseArgs,
-            jobId: "job-abc",
+            jobId: VALID_JOB_ID,
         });
 
-        assert.equal(request.jobId, "job-abc");
+        assert.equal(request.jobId, VALID_JOB_ID);
         assert.equal(request.requestId, "req-123");
         assert.equal(request.content, baseArgs.content);
 
         const claims = decodeJwt(jwt) as Record<string, unknown>;
-        assert.equal(claims.jobId, "job-abc");
+        assert.equal(claims.jobId, VALID_JOB_ID);
         assert.equal(claims.requestId, "req-123");
         assert.equal(claims.projectId, "proj-789");
         assert.equal(
@@ -63,9 +76,9 @@ describe("ApiRequest", () => {
     it("accepts an optional jobId", () => {
         const parsed = ApiRequest.parse({
             messages: [],
-            jobId: "job-abc",
+            jobId: VALID_JOB_ID,
         });
-        assert.equal(parsed.jobId, "job-abc");
+        assert.equal(parsed.jobId, VALID_JOB_ID);
     });
 
     it("parses without jobId", () => {
@@ -78,15 +91,23 @@ describe("ApiRequest", () => {
             ApiRequest.parse({ messages: [], jobId: "" }),
         );
     });
+
+    for (const [label, value] of INVALID_JOB_IDS) {
+        it(`rejects ${label} as jobId`, () => {
+            assert.throws(() =>
+                ApiRequest.parse({ messages: [], jobId: value }),
+            );
+        });
+    }
 });
 
 describe("Turn input", () => {
     it("accepts an optional jobId", () => {
         const parsed = Turn.shape.input.parse({
             messages: [],
-            jobId: "job-abc",
+            jobId: VALID_JOB_ID,
         });
-        assert.equal(parsed.jobId, "job-abc");
+        assert.equal(parsed.jobId, VALID_JOB_ID);
     });
 
     it("parses without jobId", () => {
@@ -99,6 +120,14 @@ describe("Turn input", () => {
             Turn.shape.input.parse({ messages: [], jobId: "" }),
         );
     });
+
+    for (const [label, value] of INVALID_JOB_IDS) {
+        it(`rejects ${label} as jobId, matching ApiRequest`, () => {
+            assert.throws(() =>
+                Turn.shape.input.parse({ messages: [], jobId: value }),
+            );
+        });
+    }
 });
 
 // The webhook call with jobId must still go through the SSRF check that
@@ -152,7 +181,7 @@ describe("invokeWebhookTool SSRF check with jobId", () => {
                         "proj-789",
                         "test-tool",
                         { foo: "bar" },
-                        "job-abc",
+                        VALID_JOB_ID,
                     ),
                 /localhost/,
             );

@@ -1,6 +1,12 @@
 import { Message } from "@/app/lib/types/types";
 import { z } from "zod";
 
+// Caller-supplied turn id, shared by ApiRequest and Turn.input. Must be a
+// UUID, max 64 characters, no whitespace, matching newCoworker's contract
+// (src/lib/rowboat/webhook-jwt.ts: dashboard chat job ids are UUIDs;
+// anything else in the claim fails the whole signed tool call).
+export const JobId = z.string().max(64).uuid();
+
 const chatReason = z.object({
     type: z.literal("chat"),
 });
@@ -30,9 +36,12 @@ export const Turn = z.object({
         startAgent: z.string().nullable().optional(),
         // Optional caller-supplied id for this turn, forwarded on webhook
         // tool calls. Opaque to rowboat; unrelated to scheduled-job ids.
-        // An empty string is rejected here, matching ApiRequest, so it can
-        // never silently run without the requested job scope downstream.
-        jobId: z.string().min(1).optional(),
+        // Must be a UUID (see JobId): newCoworker fails the whole signed
+        // tool call when jobId is not a UUID, so a bad value must never
+        // reach it. An empty string is rejected here, matching ApiRequest,
+        // so it can never silently run without the requested job scope
+        // downstream.
+        jobId: JobId.optional(),
     }),
     output: z.array(Message),
     error: z.string().optional(),

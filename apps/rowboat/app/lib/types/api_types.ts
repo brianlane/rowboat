@@ -1,5 +1,5 @@
 import { Message } from "./types";
-import { Turn } from "@/src/entities/models/turn";
+import { JobId, Turn } from "@/src/entities/models/turn";
 import { z } from "zod";
 
 export const ApiRequest = z.object({
@@ -16,9 +16,11 @@ export const ApiRequest = z.object({
     // webhook tool calls (POST body and JWT claims) so a downstream receiver
     // can scope a lookup to this one turn instead of the whole project.
     // It is opaque to rowboat and unrelated to rowboat's scheduled-job ids.
+    // Must be a UUID (see JobId): newCoworker fails the whole signed tool
+    // call when jobId is not a UUID, so a bad value must never reach it.
     // An empty string is rejected here so it can never silently run without
     // the requested job scope downstream.
-    jobId: z.string().min(1).optional(),
+    jobId: JobId.optional(),
 });export const ApiResponse = z.object({
     turn: Turn,
     conversationId: z.string().optional(),
