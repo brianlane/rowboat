@@ -1,8 +1,14 @@
-import { describe, it } from "node:test";
+import { after, describe, it } from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import { decodeJwt } from "jose";
+import { asValue } from "awilix";
 import { buildWebhookRequest } from "./webhook-request";
+import { invokeWebhookTool } from "./agent-tools";
+import { container } from "../../../../di/container";
+import { PrefixLogger } from "../../../../app/lib/utils";
+import { UsageTracker } from "../../../../app/lib/billing";
+import { redisClient } from "../../../../app/lib/redis";
 import { ApiRequest } from "../../../../app/lib/types/api_types";
 import { Turn } from "../../../../src/entities/models/turn";
 
@@ -92,5 +98,67 @@ describe("Turn input", () => {
         assert.throws(() =>
             Turn.shape.input.parse({ messages: [], jobId: "" }),
         );
+    });
+});
+
+// The webhook call with jobId must still go through the SSRF check that
+// the upgrades branch added: invokeWebhookTool validates the project's
+// webhook URL before building the request or fetching, so a private URL
+// is rejected even when a jobId is set. These tests stub the projects
+// repository in the DI container and prove no fetch happens.
+describe("invokeWebhookTool SSRF check with jobId", () => {
+    const logger = new PrefixLogger("test");
+    const usageTracker = new UsageTracker();
+
+    // Importing the DI container also creates the module-level Redis client,
+    // whose reconnect loop would keep the test process alive forever when
+    // no Redis is reachable. Disconnect it so the runner can exit.
+    after(() => {
+        redisClient.disconnect();
+    });
+
+    function stubProjectRepository(webhookUrl: string) {
+        container.register({
+            projectsRepository: asValue({
+                fetch: async () => ({ webhookUrl, secret: "test-secret" }),
+            }),
+        });
+    }
+
+    function stubFetch() {
+        const calls: unknown[] = [];
+        const originalFetch = globalThis.fetch;
+        globalThis.fetch = (async (...args: unknown[]) => {
+            calls.push(args);
+            throw new Error("fetch must not be called for a blocked webhook URL");
+        }) as typeof fetch;
+        return {
+            calls,
+            restore: () => {
+                globalThis.fetch = originalFetch;
+            },
+        };
+    }
+
+    it("rejects a loopback webhook URL before fetching, even with jobId set", async () => {
+        stubProjectRepository("http://127.0.0.1:9999/hook");
+        const fetchStub = stubFetch();
+        try {
+            await assert.rejects(
+                () =>
+                    invokeWebhookTool(
+                        logger,
+                        usageTracker,
+                        "proj-789",
+                        "test-tool",
+                        { foo: "bar" },
+                        "job-abc",
+                    ),
+                /localhost/,
+            );
+            assert.equal(fetchStub.calls.length, 0);
+        } finally {
+            fetchStub.restore();
+        }
     });
 });
